@@ -1,0 +1,30 @@
+## Build and Output Folders
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## IDE & Editors
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+## Logs and Migrations output
+*.log
+migrations/*.sql
+!migrations/.gitkeep
+
+## Test Results
+TestResults/
+[Tt]est[Rr]esult*
+*.trx
+
+## OS generated files
+.DS_Store
+Thumbs.db
