@@ -19,6 +19,8 @@ public class ProjectInspectionResult
     public DeploymentTargetType DetectedDeployTarget { get; set; }
     public string TargetDescription { get; set; } = string.Empty;
     public bool IsAspNetCore { get; set; }
+    public bool IsNetFramework { get; set; }
+    public string ClrVersion { get; set; } = string.Empty;
     public bool HasWindowsServiceSupport { get; set; }
     public List<string> PackageReferences { get; set; } = new();
     public List<string> ProjectReferences { get; set; } = new();

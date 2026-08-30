@@ -1,4 +1,4 @@
-using System.Management.Automation;
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -32,40 +32,68 @@ public class LocalExecutor : IRemoteExecutor
 
     public async Task<RemoteExecutionResult> ExecutePowerShellScriptAsync(string script, RemoteConnectionConfig config, CancellationToken cancellationToken = default)
     {
-        return await Task.Run(() =>
+        return await Task.Run(async () =>
         {
-            _logger.LogInformation("Executing local PowerShell script...");
-            using var ps = PowerShell.Create();
-            ps.AddScript(script);
+            _logger.LogInformation("Executing local PowerShell script via Windows PowerShell...");
+
+            var tempScriptPath = Path.Combine(Path.GetTempPath(), $"mcp_exec_{Guid.NewGuid():N}.ps1");
+            await File.WriteAllTextAsync(tempScriptPath, script, Encoding.UTF8, cancellationToken);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{tempScriptPath}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
             var outputBuilder = new StringBuilder();
             var errorBuilder = new StringBuilder();
 
-            var results = ps.Invoke();
+            using var process = new Process { StartInfo = psi };
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) outputBuilder.AppendLine(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) errorBuilder.AppendLine(e.Data); };
 
-            foreach (var item in results)
+            try
             {
-                if (item != null)
-                    outputBuilder.AppendLine(item.ToString());
-            }
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
 
-            if (ps.Streams.Error.Count > 0)
-            {
-                foreach (var err in ps.Streams.Error)
+                await process.WaitForExitAsync(cancellationToken);
+
+                var exitCode = process.ExitCode;
+                var hasError = exitCode != 0;
+
+                return new RemoteExecutionResult
                 {
-                    errorBuilder.AppendLine(err.ToString());
-                }
+                    Success = !hasError,
+                    ExitCode = exitCode,
+                    StandardOutput = outputBuilder.ToString(),
+                    StandardError = errorBuilder.ToString()
+                };
             }
-
-            var hasError = ps.HadErrors;
-
-            return new RemoteExecutionResult
+            catch (Exception ex)
             {
-                Success = !hasError,
-                ExitCode = hasError ? 1 : 0,
-                StandardOutput = outputBuilder.ToString(),
-                StandardError = errorBuilder.ToString()
-            };
+                _logger.LogError(ex, "Failed to execute local PowerShell process");
+                return new RemoteExecutionResult
+                {
+                    Success = false,
+                    ExitCode = 1,
+                    StandardError = ex.Message
+                };
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempScriptPath))
+                        File.Delete(tempScriptPath);
+                }
+                catch { }
+            }
         }, cancellationToken);
     }
 

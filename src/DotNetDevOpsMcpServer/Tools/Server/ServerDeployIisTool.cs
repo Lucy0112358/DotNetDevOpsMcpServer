@@ -63,6 +63,12 @@ public class ServerDeployIisTool : IDevOpsTool
                 Description = "Whether to automatically open the binding port in the Windows Firewall (default: true).",
                 Default = true
             },
+            ["clrVersion"] = new()
+            {
+                Type = "string",
+                Description = "IIS AppPool CLR version: '' (No Managed Code for ASP.NET Core) or 'v4.0' (for .NET Framework 4.x).",
+                Default = ""
+            },
             ["protocol"] = new()
             {
                 Type = "string",
@@ -89,6 +95,7 @@ public class ServerDeployIisTool : IDevOpsTool
         var packagePath = arguments.GetString("packagePath")!;
         var physicalPath = arguments.GetString("physicalPath", $@"C:\inetpub\wwwroot\{siteName}")!;
         var openFirewall = arguments.GetBool("openFirewallPort", true);
+        var clrVersion = arguments.GetString("clrVersion", "") ?? "";
         var protocol = arguments.GetString("protocol", "Auto")!;
 
         if (!File.Exists(packagePath) && !Directory.Exists(packagePath))
@@ -135,6 +142,7 @@ $appPoolName = '{appPoolName.Replace("'", "''")}'
 $port = {port}
 $physicalPath = '{physicalPath.Replace("'", "''")}'
 $stagingFile = '{remoteStagingFile.Replace("'", "''")}'
+$clrVersion = '{clrVersion.Replace("'", "''")}'
 
 Write-Output ""[1/5] Stopping IIS Site and AppPool if running...""
 if (Test-Path ""IIS:\Sites\$siteName"") {{
@@ -164,8 +172,8 @@ Write-Output ""[3/5] Configuring IIS AppPool and Website...""
 if (-not (Test-Path ""IIS:\AppPools\$appPoolName"")) {{
     New-WebAppPool -Name $appPoolName | Out-Null
 }}
-# Set .NET CLR version to '' (No Managed Code for ASP.NET Core)
-Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""managedRuntimeVersion"" -Value """"
+# Set .NET CLR version ('' for ASP.NET Core, 'v4.0' for .NET Framework)
+Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""managedRuntimeVersion"" -Value $clrVersion
 Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""startMode"" -Value ""AlwaysRunning""
 
 if (-not (Test-Path ""IIS:\Sites\$siteName"")) {{
