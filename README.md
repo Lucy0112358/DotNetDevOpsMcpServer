@@ -28,20 +28,34 @@ A Model Context Protocol (MCP) server written in **C# (.NET 8 LTS)** that automa
 
 ---
 
-## Exposed MCP Tools
+## Exposed MCP Tools (15 Tools)
 
+### 🗄️ Database Tools (Schema-First & Code-First)
 | Tool | Description |
 | :--- | :--- |
-| `db_compare_schemas` | Compares two SQL Server schemas and outputs a structural diff report (tables, views, SPs, indexes). |
+| `db_compare_schemas` | Compares two SQL Server schemas and outputs a structural diff report (tables, views, SPs, indexes) using DacFx. |
 | `db_generate_migration_script` | Generates a transactional T-SQL schema migration script to evolve target DB to match source DB. |
-| `db_apply_migration` | Applies a migration script (or file) against the target database. |
+| `db_apply_migration` | Applies a migration script (or file) against the target database with batching and transaction handling. |
+| `ef_generate_migration_script` | Generates an idempotent T-SQL migration script directly from C# `DbContext` & migrations using `dotnet ef`. |
+| `ef_database_update` | Applies EF Core Code-First migrations directly to any target database (local or remote). |
+| `ef_list_migrations` | Inspects and lists all applied vs pending EF Core migrations for a given project/database. |
+
+### 🔨 Build & Package Tools
+| Tool | Description |
+| :--- | :--- |
 | `dotnet_inspect_project` | Analyzes `.csproj` / `.sln` to detect framework, dependencies, and whether it's an IIS Web App or Windows Service. |
 | `dotnet_build_and_publish` | Publishes the project via `dotnet publish` and packages a ready-to-deploy `.zip`. |
+
+### 🌐 Server & Deployment Tools
+| Tool | Description |
+| :--- | :--- |
 | `server_test_connection` | Tests remote management connectivity (WinRM / SSH / Local) and retrieves OS details. |
 | `server_deploy_iis` | Deploys Web App to IIS, managing AppPool, Website, backups, and firewall rules. |
 | `server_deploy_windows_service` | Deploys Worker Service to Windows Services, managing service registration and state. |
 | `server_configure_firewall` | Opens or updates inbound/outbound Windows Firewall rules. |
 | `server_auto_deploy` | Complete pipeline: Auto-detects project $\to$ builds $\to$ generates DB diff $\to$ deploys to IIS/Service $\to$ opens firewall. |
+| `server_undeploy_iis` | Stops, unregisters, and removes an IIS Website and Application Pool. |
+| `server_undeploy_windows_service` | Stops, unregisters, and removes a Windows Service. |
 
 ---
 
