@@ -64,8 +64,8 @@ Import-Module WebAdministration -ErrorAction SilentlyContinue
 
 $siteName = '{siteName.Replace("'", "''")}'
 $appPoolName = '{appPoolName.Replace("'", "''")}'
-$deleteFiles = ${(deleteFiles ? "$true" : "$false")}
-$removeFirewall = ${(removeFirewall ? "$true" : "$false")}
+$deleteFiles = {(deleteFiles ? "$true" : "$false")}
+$removeFirewall = {(removeFirewall ? "$true" : "$false")}
 
 $hasWebAdmin = $false
 try {{

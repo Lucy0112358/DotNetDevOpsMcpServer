@@ -57,7 +57,7 @@ public class ServerUndeployWindowsServiceTool : IDevOpsTool
             var undeployScript = $@"
 $ErrorActionPreference = 'Stop'
 $serviceName = '{serviceName.Replace("'", "''")}'
-$deleteFiles = ${(deleteFiles ? "$true" : "$false")}
+$deleteFiles = {(deleteFiles ? "$true" : "$false")}
 
 Write-Output ""[1/3] Stopping service $serviceName if running...""
 $svc = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
