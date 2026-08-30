@@ -233,7 +233,7 @@ if ($hasWebAdmin) {{
 
     $existingSite = & $appcmd list site ""$siteName"" 2>$null
     if (-not $existingSite) {{
-        & $appcmd add site /name:""$siteName"" /bindings:""http/*:$port:"" /physicalPath:""$physicalPath""
+        & $appcmd add site /name:""$siteName"" /bindings:""http/*:$($port):"" /physicalPath:""$physicalPath""
         & $appcmd set site /site.name:""$siteName"" /[path='/'].applicationPool:""$appPoolName""
         Write-Output ""Created new IIS Website via appcmd: $siteName on port $port""
     }} else {{
