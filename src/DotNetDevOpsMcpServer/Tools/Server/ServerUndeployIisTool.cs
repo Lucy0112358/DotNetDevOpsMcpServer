@@ -121,6 +121,20 @@ if ($removeFirewall) {{
     Write-Output ""[4/4] Skipping firewall rule removal.""
 }}
 
+$stillExists = $false
+if ($hasWebAdmin) {{
+    $stillExists = Test-Path ""IIS:\Sites\$siteName""
+}} elseif (Test-Path $appcmd) {{
+    $chk = & $appcmd list site ""$siteName"" 2>$null
+    if ($chk -and -not ($chk -match 'ERROR')) {{
+        $stillExists = $true
+    }}
+}}
+
+if ($stillExists) {{
+    throw ""Failed to remove IIS site '$siteName'. Check that the process has permissions to modify IIS configuration.""
+}}
+
 Write-Output ""Undeployment completed successfully for IIS site $siteName.""
 ";
 
