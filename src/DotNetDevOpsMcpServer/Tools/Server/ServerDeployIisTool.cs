@@ -132,7 +132,19 @@ public class ServerDeployIisTool : IDevOpsTool
                 remoteStagingFile = packagePath;
             }
 
-            // Step 2: Generate and execute PowerShell deployment script
+            var firewallSnippet = openFirewall ? @"
+Write-Output ""[5/5] Configuring Windows Firewall rule for port $port...""
+$ruleName = ""IIS-$siteName-$port""
+if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort $port -Protocol TCP -Action Allow | Out-Null
+    Write-Output ""Created firewall rule $ruleName for port $port""
+} else {
+    Write-Output ""Firewall rule $ruleName already exists.""
+}
+" : @"
+Write-Output ""[5/5] Skipping firewall configuration as requested.""
+";
+
             var deployScript = $@"
 $ErrorActionPreference = 'Stop'
 Import-Module WebAdministration -ErrorAction SilentlyContinue
@@ -145,11 +157,24 @@ $stagingFile = '{remoteStagingFile.Replace("'", "''")}'
 $clrVersion = '{clrVersion.Replace("'", "''")}'
 
 Write-Output ""[1/5] Stopping IIS Site and AppPool if running...""
-if (Test-Path ""IIS:\Sites\$siteName"") {{
-    try {{ Stop-WebSite -Name $siteName -ErrorAction SilentlyContinue }} catch {{}}
-}}
-if (Test-Path ""IIS:\AppPools\$appPoolName"") {{
-    try {{ Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue }} catch {{}}
+$hasWebAdmin = $false
+try {{
+    Import-Module WebAdministration -ErrorAction Stop
+    $hasWebAdmin = Test-Path ""IIS:\Sites""
+}} catch {{}}
+
+$appcmd = ""$env:SystemRoot\System32\inetsrv\appcmd.exe""
+
+if ($hasWebAdmin) {{
+    if (Test-Path ""IIS:\Sites\$siteName"") {{
+        try {{ Stop-WebSite -Name $siteName -ErrorAction SilentlyContinue }} catch {{}}
+    }}
+    if (Test-Path ""IIS:\AppPools\$appPoolName"") {{
+        try {{ Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue }} catch {{}}
+    }}
+}} elseif (Test-Path $appcmd) {{
+    & $appcmd stop site ""$siteName"" 2>$null
+    & $appcmd stop apppool ""$appPoolName"" 2>$null
 }}
 
 Write-Output ""[2/5] Backing up and updating binaries at $physicalPath...""
@@ -164,39 +189,70 @@ if (Test-Path $physicalPath) {{
 
 if ($stagingFile.EndsWith('.zip', [System.StringComparison]::OrdinalIgnoreCase)) {{
     Expand-Archive -Path $stagingFile -DestinationPath $physicalPath -Force
+    $publishedSubdir = Get-ChildItem -Path ""$physicalPath\_PublishedWebsites"" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($publishedSubdir) {{
+        Copy-Item -Path ""$($publishedSubdir.FullName)\*"" -Destination $physicalPath -Recurse -Force
+        Remove-Item -Path ""$physicalPath\_PublishedWebsites"" -Recurse -Force -ErrorAction SilentlyContinue
+    }}
 }} else {{
     Copy-Item -Path ""$stagingFile\*"" -Destination $physicalPath -Recurse -Force
 }}
 
 Write-Output ""[3/5] Configuring IIS AppPool and Website...""
-if (-not (Test-Path ""IIS:\AppPools\$appPoolName"")) {{
-    New-WebAppPool -Name $appPoolName | Out-Null
-}}
-# Set .NET CLR version ('' for ASP.NET Core, 'v4.0' for .NET Framework)
-Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""managedRuntimeVersion"" -Value $clrVersion
-Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""startMode"" -Value ""AlwaysRunning""
+if ($hasWebAdmin) {{
+    # Check if AppPool exists, create if not
+    if (-not (Test-Path ""IIS:\AppPools\$appPoolName"")) {{
+        New-WebAppPool -Name $appPoolName | Out-Null
+        Write-Output ""Created new AppPool: $appPoolName""
+    }} else {{
+        Write-Output ""AppPool $appPoolName already exists. Updating...""
+    }}
+    Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""managedRuntimeVersion"" -Value $clrVersion
+    Set-ItemProperty ""IIS:\AppPools\$appPoolName"" -Name ""startMode"" -Value ""AlwaysRunning""
 
-if (-not (Test-Path ""IIS:\Sites\$siteName"")) {{
-    New-WebSite -Name $siteName -Port $port -PhysicalPath $physicalPath -ApplicationPool $appPoolName | Out-Null
-}} else {{
-    Set-ItemProperty ""IIS:\Sites\$siteName"" -Name ""physicalPath"" -Value $physicalPath
-    Set-ItemProperty ""IIS:\Sites\$siteName"" -Name ""applicationPool"" -Value $appPoolName
+    # Check if Site exists, create if not
+    if (-not (Test-Path ""IIS:\Sites\$siteName"")) {{
+        New-WebSite -Name $siteName -Port $port -PhysicalPath $physicalPath -ApplicationPool $appPoolName | Out-Null
+        Write-Output ""Created new IIS Website: $siteName on port $port""
+    }} else {{
+        Write-Output ""IIS Website $siteName already exists. Updating physical path and AppPool...""
+        Set-ItemProperty ""IIS:\Sites\$siteName"" -Name ""physicalPath"" -Value $physicalPath
+        Set-ItemProperty ""IIS:\Sites\$siteName"" -Name ""applicationPool"" -Value $appPoolName
+    }}
+}} elseif (Test-Path $appcmd) {{
+    $existingPool = & $appcmd list apppool ""$appPoolName"" 2>$null
+    if (-not $existingPool) {{
+        & $appcmd add apppool /name:""$appPoolName""
+        Write-Output ""Created new AppPool via appcmd: $appPoolName""
+    }}
+    if ($clrVersion) {{
+        & $appcmd set apppool /apppool.name:""$appPoolName"" /managedRuntimeVersion:""$clrVersion""
+    }} else {{
+        & $appcmd set apppool /apppool.name:""$appPoolName"" /managedRuntimeVersion:""""
+    }}
+
+    $existingSite = & $appcmd list site ""$siteName"" 2>$null
+    if (-not $existingSite) {{
+        & $appcmd add site /name:""$siteName"" /bindings:""http/*:$port:"" /physicalPath:""$physicalPath""
+        & $appcmd set site /site.name:""$siteName"" /[path='/'].applicationPool:""$appPoolName""
+        Write-Output ""Created new IIS Website via appcmd: $siteName on port $port""
+    }} else {{
+        & $appcmd set site /site.name:""$siteName"" /[path='/'].physicalPath:""$physicalPath""
+        & $appcmd set site /site.name:""$siteName"" /[path='/'].applicationPool:""$appPoolName""
+        Write-Output ""Updated IIS Website $siteName via appcmd""
+    }}
 }}
 
 Write-Output ""[4/5] Starting IIS AppPool and Website...""
-Start-WebAppPool -Name $appPoolName
-Start-WebSite -Name $siteName
-
-{(openFirewall ? $@"
-Write-Output ""[5/5] Configuring Windows Firewall rule for port $port...""
-$ruleName = ""IIS-$siteName-$port""
-if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {{
-    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -LocalPort $port -Protocol TCP -Action Allow | Out-Null
-    Write-Output ""Created firewall rule $ruleName for port $port""
-}} else {{
-    Write-Output ""Firewall rule $ruleName already exists.""
+if ($hasWebAdmin) {{
+    Start-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
+    Start-WebSite -Name $siteName -ErrorAction SilentlyContinue
+}} elseif (Test-Path $appcmd) {{
+    & $appcmd start apppool ""$appPoolName"" 2>$null
+    & $appcmd start site ""$siteName"" 2>$null
 }}
-" : "Write-Output \"[5/5] Skipping firewall configuration as requested.\"")}
+
+{firewallSnippet}
 
 Write-Output ""Deployment completed successfully for site $siteName on port $port.""
 ";
