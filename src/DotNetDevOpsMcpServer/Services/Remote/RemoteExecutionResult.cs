@@ -11,10 +11,13 @@ public class RemoteConnectionConfig
     public int TimeoutSeconds { get; set; } = 120;
 
     public bool IsLocal =>
-        string.Equals(Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Host, ".", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(Host, Environment.MachineName, StringComparison.OrdinalIgnoreCase);
+        (string.Equals(Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(Host, ".", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(Host, Environment.MachineName, StringComparison.OrdinalIgnoreCase)) &&
+        !string.Equals(Protocol, "WinRM", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(Protocol, "SSH", StringComparison.OrdinalIgnoreCase) &&
+        string.IsNullOrEmpty(Username);
 }
 
 public class RemoteExecutionResult
