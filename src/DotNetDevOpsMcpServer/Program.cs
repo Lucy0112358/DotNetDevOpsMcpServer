@@ -64,6 +64,8 @@ builder.Services.AddSingleton<IDevOpsTool>(sp => sp.GetRequiredService<ServerDep
 
 builder.Services.AddSingleton<IDevOpsTool, ServerConfigureFirewallTool>();
 builder.Services.AddSingleton<IDevOpsTool, ServerAutoDeployTool>();
+builder.Services.AddSingleton<IDevOpsTool, ServerUndeployIisTool>();
+builder.Services.AddSingleton<IDevOpsTool, ServerUndeployWindowsServiceTool>();
 
 // Register MCP Protocol Engine & Stdio Transport
 builder.Services.AddSingleton<McpServerEngine>();
