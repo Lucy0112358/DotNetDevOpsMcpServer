@@ -200,8 +200,36 @@ public class SqlDacFxService : IDatabaseService
             await using var conn = new SqlConnection(targetConnectionString);
             await conn.OpenAsync(cancellationToken);
 
+            // Pre-process SQLCMD script
+            var sqlcmdVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var builder = new SqlConnectionStringBuilder(targetConnectionString);
+            if (!string.IsNullOrEmpty(builder.InitialCatalog))
+            {
+                sqlcmdVars["DatabaseName"] = builder.InitialCatalog;
+                sqlcmdVars["DefaultFilePrefix"] = builder.InitialCatalog;
+            }
+
+            // Extract :setvar Key Value
+            var setvarRegex = new Regex(@"^\s*:setvar\s+([^\s]+)\s+""?([^""\r\n]*)""?", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            foreach (Match match in setvarRegex.Matches(scriptContent))
+            {
+                var key = match.Groups[1].Value.Trim();
+                var val = match.Groups[2].Value.Trim();
+                sqlcmdVars[key] = val;
+            }
+
+            // Replace $(Var) with values
+            var processed = scriptContent;
+            foreach (var kvp in sqlcmdVars)
+            {
+                processed = processed.Replace($"$({kvp.Key})", kvp.Value);
+            }
+
+            // Remove sqlcmd command lines (:setvar, :on error, :r, etc.)
+            processed = Regex.Replace(processed, @"^\s*:[a-zA-Z0-9_-]+.*$", "", RegexOptions.Multiline);
+
             // Split into batches separated by GO commands (case insensitive on newline)
-            var batches = Regex.Split(scriptContent, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            var batches = Regex.Split(processed, @"^\s*GO\s*$", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
             var count = 0;
             foreach (var batch in batches)
