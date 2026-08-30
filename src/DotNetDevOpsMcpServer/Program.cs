@@ -39,6 +39,7 @@ else
 
 // Register Services
 builder.Services.AddSingleton<IDatabaseService, SqlDacFxService>();
+builder.Services.AddSingleton<IEfCoreMigrationService, EfCoreMigrationService>();
 builder.Services.AddSingleton<IProjectBuildService, ProjectBuildService>();
 
 // Register Remote Executors
@@ -51,6 +52,9 @@ builder.Services.AddSingleton<RemoteExecutorFactory>();
 builder.Services.AddSingleton<IDevOpsTool, DbCompareSchemasTool>();
 builder.Services.AddSingleton<IDevOpsTool, DbGenerateScriptTool>();
 builder.Services.AddSingleton<IDevOpsTool, DbApplyMigrationTool>();
+builder.Services.AddSingleton<IDevOpsTool, EfGenerateMigrationScriptTool>();
+builder.Services.AddSingleton<IDevOpsTool, EfDatabaseUpdateTool>();
+builder.Services.AddSingleton<IDevOpsTool, EfListMigrationsTool>();
 builder.Services.AddSingleton<IDevOpsTool, DotnetInspectProjectTool>();
 builder.Services.AddSingleton<IDevOpsTool, DotnetBuildAndPublishTool>();
 builder.Services.AddSingleton<IDevOpsTool, ServerTestConnectionTool>();
